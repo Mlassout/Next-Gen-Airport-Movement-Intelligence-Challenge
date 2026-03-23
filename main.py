@@ -2,6 +2,7 @@ import cv2
 import streamlit as st
 from ultralytics import YOLO
 import numpy as np
+import os
 
 # --- CONFIGURATION STREAMLIT ---
 st.set_page_config(page_title="AeroVision AI", layout="wide")
@@ -16,7 +17,8 @@ def load_model():
 model = load_model()
 
 # --- PARAMÈTRES DANS LA BARRE LATÉRALE ---
-video_source = st.sidebar.text_input("Chemin de la vidéo", "video_test.mp4")
+VIDEO_ABSOLUTE_PATH = "/Users/benjamintonneau/Documents/GitHub/Next-Gen-Airport-Movement-Intelligence-Challenge/samples_data_vtest.avi"
+video_source = st.sidebar.text_input("Chemin de la vidéo", VIDEO_ABSOLUTE_PATH)
 line_y_pos = st.sidebar.slider("Position de la ligne de comptage", 0, 1000, 400)
 conf_threshold = st.sidebar.slider("Seuil de confiance IA", 0.0, 1.0, 0.4)
 enable_blur = st.sidebar.checkbox("Anonymisation RGPD (Floutage)", value=True)
@@ -32,6 +34,10 @@ FRAME_WINDOW = col1.image([]) # Fenêtre pour la vidéo
 metric_placeholder = col2.empty() # Place pour le compteur
 
 # --- BOUCLE DE TRAITEMENT ---
+if not os.path.exists(video_source):
+    st.error(f"Video introuvable: {video_source}")
+    st.stop()
+
 cap = cv2.VideoCapture(video_source)
 
 if st.sidebar.button("Démarrer l'Analyse"):
@@ -42,7 +48,16 @@ if st.sidebar.button("Démarrer l'Analyse"):
             break
 
         # 1. IA : Détection et Tracking (Suivi multi-objets)
-        results = model.track(frame, persist=True, classes=0, conf=conf_threshold, verbose=False)
+        try:
+            results = model.track(frame, persist=True, classes=0, conf=conf_threshold, verbose=False)
+        except AttributeError as e:
+            # Workaround for intermittent Ultralytics fusion issue on some environments.
+            if "'Conv' object has no attribute 'bn'" in str(e):
+                load_model.clear()
+                model = load_model()
+                results = model.track(frame, persist=True, classes=0, conf=conf_threshold, verbose=False)
+            else:
+                raise
 
         # Dessiner la ligne de comptage
         cv2.line(frame, (0, line_y_pos), (frame.shape[1], line_y_pos), (255, 0, 0), 3)
